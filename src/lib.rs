@@ -29,17 +29,9 @@ impl<W: io::Write + Send> log::Log for Logger<W> {
             let o = self.output.clone();
             let mut f = o.lock().unwrap();
 
-            let err = f.write_all(
-                format!(
-                    "{} {}\n",
-                    time::now().rfc3339(),
-                    record.args()
-                ).as_str().as_bytes()
-            );
-            match err {
-                Ok(_) => {},
-                Err(e) => { panic!(e) }, // FIXME
-            }
+            let line = format!("{} {}\n", time::now().rfc3339(), record.args());
+            f.write_all(line.as_bytes())
+                .expect("Couldn't write to log file");
         }
     }
 }
