@@ -29,7 +29,7 @@ impl<W: io::Write + Send> log::Log for Logger<W> {
             let o = self.output.clone();
             let mut f = o.lock().unwrap();
 
-            let line = format!("{} {}\n", time::now().rfc3339(), record.args());
+            let line = format!("{} {}", time::now().rfc3339(), record.args());
             f.write_all(line.as_bytes())
              .expect("Couldn't write to log file");
         }
