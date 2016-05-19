@@ -4,8 +4,8 @@ version = "0.1.1"
 authors = ["Henry Precheur <henry@precheur.org>"]
 description = "Logging library"
 repository = "https://github.com/henryprecheur/lolog/"
-license_file = "LICENSE"
+license = "ISC"
 
 [dependencies]
-log = "0.3"
+log = "^0.3"
 time = "^0.1"
