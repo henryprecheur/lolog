@@ -1,51 +1,71 @@
 #![crate_type = "lib"]
 #![crate_name = "lolog"]
 
+///
+/// Work in progress, don't use it.
+/// 
+///     lolog::init(log::LogLevel::Info, std::io::stderr());
+///
 extern crate log;
+extern crate time;
 
 use std::io;
-use std::iter::FromIterator;
 
-use log::{LogRecord, LogLevel, LogMetadata};
+use log::{LogRecord, LogLevel, LogMetadata, SetLoggerError};
 use std::sync::{Arc, Mutex};
 
-pub struct Logger<'a> {
+pub struct Logger<Writer: io::Write+Send> {
     max_level: LogLevel,
-    outputs: Arc<Mutex<Vec<&'a mut (io::Write + Sync + Send)>>>,
+    output: Arc<Mutex<Writer>>,
 }
 
-impl<'a> log::Log for Logger<'a> {
+impl<W: io::Write + Send> log::Log for Logger<W> {
     fn enabled(&self, metadata: &LogMetadata) -> bool {
         metadata.level() <= self.max_level
     }
 
     fn log(&self, record: &LogRecord) {
         if self.enabled(record.metadata()) {
-            let o = self.outputs.clone();
-            let mut lg = o.lock().unwrap();
+            let o = self.output.clone();
+            let mut f = o.lock().unwrap();
 
-            for i in lg.iter_mut() {
-                let err = i.write_all(
-                    format!("{} - {}", record.level(), record.args()).as_str().as_bytes());
-                match err {
-                    Ok(_) => {},
-                    Err(e) => { panic!(e) },
-                }
+            let err = f.write_all(
+                format!(
+                    "{} {}\n",
+                    time::now().rfc3339(),
+                    record.args()
+                ).as_str().as_bytes()
+            );
+            match err {
+                Ok(_) => {},
+                Err(e) => { panic!(e) }, // FIXME
             }
         }
     }
 }
 
-impl<'a> Logger<'a> {
-    pub fn init<'b, I: Iterator<Item=&'b mut (io::Write + Sync + Send)>>
-    (max_level: LogLevel, files: I) {
-        let outputs = Vec::from_iter(files);
-
+impl<W: io::Write+Send> Logger<W> {
+    pub fn new(
+        max_level: LogLevel,
+        writer: W,
+    ) -> Self {
         Logger{
             max_level: max_level,
-            outputs: Arc::new(Mutex::new(outputs)),
-        };
+            output: Arc::new(Mutex::new(writer)),
+        }
     }
+}
+
+pub fn init
+    <W:'static+io::Write+Send>
+    (level: LogLevel, output: W)
+    -> Result<(), SetLoggerError>
+{
+    log::set_logger(move |max_log_level| {
+        // let LoggerBuilder{level, output} = self;
+        max_log_level.set(level.to_log_level_filter());
+        Box::new(Logger::new(level, output))
+    })
 }
 
 #[cfg(test)]
