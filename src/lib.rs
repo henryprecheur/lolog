@@ -14,9 +14,12 @@ use std::io;
 use log::{LogRecord, LogLevel, LogMetadata, SetLoggerError};
 use std::sync::{Arc, Mutex};
 
+type Formatter = Fn(&LogRecord) -> String + Send + Sync;
+
 pub struct Logger<Writer: io::Write + Send> {
     max_level: LogLevel,
     output: Arc<Mutex<Writer>>,
+    formatter: Box<Formatter>,
 }
 
 impl<W: io::Write + Send> log::Log for Logger<W> {
@@ -29,9 +32,28 @@ impl<W: io::Write + Send> log::Log for Logger<W> {
             let o = self.output.clone();
             let mut f = o.lock().unwrap();
 
-            let line = format!("{} {}", time::now().rfc3339(), record.args());
+            // let line = format!("{} {}", time::now().rfc3339(), record.args());
+            let line = (self.formatter)(record);
             f.write_all(line.as_bytes())
              .expect("Couldn't write to log file");
+        }
+    }
+}
+
+pub fn default_formatter(record: &LogRecord) -> String {
+    match record.target() {
+        "" => {
+            format!("{} {} {}",
+                    time::now().rfc3339(),
+                    record.level(),
+                    record.args())
+        }
+        _ => {
+            format!("{} {} {} {}",
+                    time::now().rfc3339(),
+                    record.target(),
+                    record.level(),
+                    record.args())
         }
     }
 }
@@ -41,6 +63,7 @@ impl<W: io::Write + Send> Logger<W> {
         Logger {
             max_level: max_level,
             output: Arc::new(Mutex::new(writer)),
+            formatter: Box::new(default_formatter),
         }
     }
 }
