@@ -32,10 +32,66 @@ impl<W: io::Write + Send> log::Log for Logger<W> {
             let o = self.output.clone();
             let mut f = o.lock().unwrap();
 
-            // let line = format!("{} {}", time::now().rfc3339(), record.args());
             let line = (self.formatter)(record);
             f.write_all(line.as_bytes())
              .expect("Couldn't write to log file");
+        }
+    }
+}
+
+impl<W: io::Write + Send> Logger<W> {
+    pub fn new(max_level: LogLevel, writer: W) -> Self {
+        Logger {
+            max_level: max_level,
+            output: Arc::new(Mutex::new(writer)),
+            formatter: Box::new(default_formatter),
+        }
+    }
+}
+
+// Write to multiple io::Write objects.
+pub struct MultiWriter<Writer: io::Write + Send> {
+    outputs: Vec<Arc<Mutex<Writer>>>,
+}
+
+impl<W: io::Write + Send> io::Write for MultiWriter<W> {
+    //
+    // Return number of bytes in buf
+    //
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        for i in self.outputs.iter() {
+            let rc = i.clone();
+            let mut writer = rc.lock().unwrap();
+
+            match writer.write_all(buf) {
+                Ok(_) => {},
+                Err(e)  => return Err(e),
+            }
+        }
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        for i in self.outputs.iter() {
+            let rc = i.clone();
+            let mut writer = rc.lock().unwrap();
+
+            match writer.flush() {
+                Ok(_) => {},
+                Err(e)  => return Err(e),
+            }
+        }
+        Ok(())
+    }
+}
+
+impl<W: io::Write + Send> MultiWriter<W>
+{
+    pub fn new(writers: &mut Iterator<Item=W>) -> Self {
+        MultiWriter {
+            outputs: writers.into_iter().map(|x| {
+                Arc::new(Mutex::new(x))
+            }).collect()
         }
     }
 }
@@ -54,16 +110,6 @@ pub fn default_formatter(record: &LogRecord) -> String {
                     record.target(),
                     record.level(),
                     record.args())
-        }
-    }
-}
-
-impl<W: io::Write + Send> Logger<W> {
-    pub fn new(max_level: LogLevel, writer: W) -> Self {
-        Logger {
-            max_level: max_level,
-            output: Arc::new(Mutex::new(writer)),
-            formatter: Box::new(default_formatter),
         }
     }
 }
